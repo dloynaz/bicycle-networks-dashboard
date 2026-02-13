@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
-import { MapPin, Building, ArrowRight } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { MapPin, Building, ArrowRight, Locate, Bike } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Map from '../components/Map';
 import countryData from '../data/countries.json';
@@ -15,12 +15,13 @@ import type { Network } from '../types';
 const HomePage = () => {
   const router = useRouter();
   const [networks, setNetworks] = useState<Network[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedCountry, setSelectedCountry] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [networksPerPage] = useState(12);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Initialize from URL params on client
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setSearch(params.get('search') || '');
@@ -31,10 +32,13 @@ const HomePage = () => {
   useEffect(() => {
     const load = async () => {
       try {
+        setLoading(true);
         const data = await fetchNetworks();
         setNetworks(data);
       } catch (error) {
         console.error('Error fetching networks:', error);
+      } finally {
+        setLoading(false);
       }
     };
     load();
@@ -60,68 +64,123 @@ const HomePage = () => {
     setCurrentPage(1);
   };
 
-  const filteredNetworks = networks.filter((network) => {
-    const matchesSearch =
-      network.name.toLowerCase().includes(search.toLowerCase()) ||
-      network.company?.some((company) => company.toLowerCase().includes(search.toLowerCase()));
+  const filteredNetworks = useMemo(() => {
+    return networks.filter((network) => {
+      const matchesSearch =
+        network.name.toLowerCase().includes(search.toLowerCase()) ||
+        network.company?.some((company) => company.toLowerCase().includes(search.toLowerCase()));
 
-    const matchesCountry = (() => {
-      if (!selectedCountry) return true;
-      const sel = selectedCountry.trim().toLowerCase();
-      const netCountryRaw = (network.location.country || '').trim();
-      const net = netCountryRaw.toLowerCase();
-      if (!net) return false;
+      const matchesCountry = (() => {
+        if (!selectedCountry) return true;
+        const sel = selectedCountry.trim().toLowerCase();
+        const netCountryRaw = (network.location.country || '').trim();
+        const net = netCountryRaw.toLowerCase();
+        if (!net) return false;
 
-      if (net === sel) return true;
-
-      // If network has a 2-letter code, compare with countries.json
-      if (net.length === 2) {
-        const entry = countryData.data.find((c) => c.code.toLowerCase() === net);
-        if (entry && entry.name.toLowerCase() === sel) return true;
-      }
-
-      // If selected country is a code, compare
-      if (sel.length === 2) {
         if (net === sel) return true;
-        const entry = countryData.data.find((c) => c.code.toLowerCase() === sel);
-        if (entry && entry.name.toLowerCase() === net) return true;
-      }
 
-      // fallback to partial match
-      if (net.includes(sel) || sel.includes(net)) return true;
-      return false;
-    })();
+        if (net.length === 2) {
+          const entry = countryData.data.find((c) => c.code.toLowerCase() === net);
+          if (entry && entry.name.toLowerCase() === sel) return true;
+        }
 
-    return matchesSearch && matchesCountry;
-  });
+        if (sel.length === 2) {
+          if (net === sel) return true;
+          const entry = countryData.data.find((c) => c.code.toLowerCase() === sel);
+          if (entry && entry.name.toLowerCase() === net) return true;
+        }
+
+        if (net.includes(sel) || sel.includes(net)) return true;
+        return false;
+      })();
+
+      return matchesSearch && matchesCountry;
+    });
+  }, [networks, search, selectedCountry]);
 
   const indexOfLastNetwork = currentPage * networksPerPage;
   const indexOfFirstNetwork = indexOfLastNetwork - networksPerPage;
   const currentNetworks = filteredNetworks.slice(indexOfFirstNetwork, indexOfLastNetwork);
   const totalPages = Math.ceil(filteredNetworks.length / networksPerPage);
 
-  const handleNetworkClick = (id: string) => {
-    router.push(`/network/${id}`);
+  const handleNetworkClick = useCallback(
+    (id: string) => {
+      router.push(`/network/${id}`);
+    },
+    [router]
+  );
+
+  const mapNetworks = useMemo(
+    () => filteredNetworks.map((n) => ({ id: n.id, name: n.name, location: n.location })),
+    [filteredNetworks]
+  );
+
+  const handleNearMe = () => {
+    console.log('Near me button clicked');
+    if (!navigator.geolocation) {
+      console.log('Geolocation not supported');
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+    console.log('Requesting geolocation...');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        console.log('Location received:', { latitude, longitude });
+        setUserLocation({ lat: latitude, lng: longitude });
+        
+        // Find nearest network
+        let nearestNetwork = null;
+        let minDistance = Infinity;
+        
+        filteredNetworks.forEach((network) => {
+          if (network.location?.latitude && network.location?.longitude) {
+            // Calculate distance using Haversine formula
+            const R = 6371; // Earth's radius in km
+            const dLat = (network.location.latitude - latitude) * Math.PI / 180;
+            const dLon = (network.location.longitude - longitude) * Math.PI / 180;
+            const a = 
+              Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(latitude * Math.PI / 180) * Math.cos(network.location.latitude * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const distance = R * c;
+            
+            if (distance < minDistance) {
+              minDistance = distance;
+              nearestNetwork = network;
+            }
+          }
+        });
+        
+        if (nearestNetwork) {
+          console.log('Nearest network:', nearestNetwork.name, 'Distance:', minDistance.toFixed(2), 'km');
+          // Navigate to nearest network detail page
+          router.push(`/network/${nearestNetwork.id}`);
+        } else {
+          console.log('No networks found nearby');
+        }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        alert('Unable to get your location. Please enable location services.');
+      }
+    );
   };
 
   return (
-    <div className="h-screen w-screen bg-zinc-50 text-zinc-950 font-sans flex overflow-hidden">
-      {/* Sidebar */}
-      <div className="w-96 bg-white border-r border-zinc-200 overflow-hidden flex flex-col">
-        {/* Sidebar Header */}
-        <div className="p-6 border-b border-zinc-200 flex-shrink-0">
+    <div className="h-screen w-screen bg-zinc-50 text-zinc-950 font-sans flex overflow-hidden relative">
+      <div className="w-[551px] bg-white overflow-hidden flex flex-col">
+        <div className="p-4 flex-shrink-0">
           <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 bg-grenadier-500/10 rounded-full flex items-center justify-center text-grenadier-500 font-bold">
-              🚴
-            </div>
-            <span className="text-sm font-semibold text-grenadier-500">CycleMap</span>
+            <Bike className="w-5 h-5 text-accent" strokeWidth={2} />
+            <span className="text-lg font-semibold text-accent">CycleMap</span>
           </div>
-          <h2 className="text-2xl font-bold text-torea-bay-800 mb-4">Discover bike networks</h2>
+          <h2 className="text-2xl font-bold text-primary mb-4">Discover bike networks</h2>
           <p className="text-xs text-zinc-500 leading-relaxed">Lorem ipsum dolor sit amet consectetur. A volutpat adipiscing placerat turpis magna sem tempor amet faucibus.</p>
         </div>
 
-        {/* Search Controls */}
-        <div className="p-6 border-b border-zinc-200 flex-shrink-0">
+        <div className="p-4 flex-shrink-0">
           <SearchControls
             search={search}
             selectedCountry={selectedCountry}
@@ -130,10 +189,23 @@ const HomePage = () => {
           />
         </div>
 
-        {/* Networks List - Scrollable */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          <div className="p-6 space-y-3">
-            {currentNetworks.length > 0 ? (
+          <div className="px-0 py-0 space-y-0">
+            {loading ? (
+              // Loading skeleton
+              Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="px-4 py-4 border-b border-zinc-200 animate-pulse">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-zinc-200 rounded-full flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="h-5 bg-zinc-200 rounded w-3/4 mb-2" />
+                      <div className="h-3 bg-zinc-200 rounded w-1/2 mb-1" />
+                      <div className="h-3 bg-zinc-200 rounded w-2/3" />
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : currentNetworks.length > 0 ? (
               currentNetworks.map((network) => (
                 <NetworkCard key={network.id} network={network} onClick={handleNetworkClick} />
               ))
@@ -145,16 +217,28 @@ const HomePage = () => {
           </div>
         </div>
 
-        {/* Pagination - Fixed at Bottom */}
-        <div className="p-6 border-t border-zinc-200 flex-shrink-0">
+        <div className="p-4 flex-shrink-0">
           <Pagination current={currentPage} total={totalPages} onPage={(n) => setCurrentPage(n)} />
         </div>
       </div>
 
-      {/* Map Container - Full Height */}
-      <main className="flex-1 h-screen overflow-hidden">
-        <Map networks={filteredNetworks.map((n) => ({ id: n.id, name: n.name, location: n.location }))} onNetworkClick={handleNetworkClick} />
+      <main className="flex-1 h-screen overflow-hidden min-w-0">
+        <Map 
+          networks={mapNetworks} 
+          onNetworkClick={handleNetworkClick}
+          userLocation={userLocation}
+        />
       </main>
+
+      {/* Near me button - positioned absolutely at page level, desktop only */}
+      <button 
+        onClick={handleNearMe}
+        className="hidden md:flex px-4 py-2.5 bg-primary text-primary-foreground rounded-pill shadow-lg hover:shadow-xl transition-shadow items-center gap-2 font-semibold text-sm z-[9999] cursor-pointer"
+        style={{ position: 'absolute', left: '610px', bottom: '790px' }}
+      >
+        <Locate className="w-5 h-5" />
+        Near me
+      </button>
     </div>
   );
 };

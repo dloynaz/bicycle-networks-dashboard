@@ -14,13 +14,14 @@ type MapProps = {
     name: string;
   }>;
   onNetworkClick: (id: string) => void;
+  userLocation?: { lat: number; lng: number } | null;
 };
 
-const Map: React.FC<MapProps> = ({ networks, onNetworkClick }) => {
+const Map: React.FC<MapProps> = ({ networks, onNetworkClick, userLocation }) => {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const userMarker = useRef<mapboxgl.Marker | null>(null);
 
   useEffect(() => {
     if (!mapContainer.current || !mapboxgl.accessToken) return;
@@ -37,7 +38,10 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick }) => {
     return () => {
       markers.current.forEach((m) => m.remove());
       markers.current = [];
-      // Do not remove map here to preserve it if component re-renders; Next will unload when unmounting
+      if (userMarker.current) {
+        userMarker.current.remove();
+        userMarker.current = null;
+      }
       if (map.current) {
         try {
           map.current.remove();
@@ -62,7 +66,7 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick }) => {
     networks.forEach((network) => {
       if (!network.location || !network.location.latitude || !network.location.longitude) return;
       const el = document.createElement('div');
-      el.className = 'w-3.5 h-3.5 bg-grenadier-500 rounded-full cursor-pointer hover:opacity-90 transition shadow-md';
+      el.className = 'w-3.5 h-3.5 bg-accent rounded-full cursor-pointer hover:opacity-90 transition shadow-md';
 
       const marker = new mapboxgl.Marker({ element: el })
         .setLngLat([network.location.longitude, network.location.latitude])
@@ -80,6 +84,32 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick }) => {
       markers.current.push(marker);
     });
   }, [networks, onNetworkClick]);
+
+  // Handle user location updates
+  useEffect(() => {
+    if (!map.current || !userLocation) return;
+
+    // Remove previous user marker if exists
+    if (userMarker.current) {
+      userMarker.current.remove();
+    }
+
+    // Create user location marker
+    const el = document.createElement('div');
+    el.className = 'w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-lg';
+    el.style.boxShadow = '0 0 0 4px rgba(59, 130, 246, 0.2)';
+
+    userMarker.current = new mapboxgl.Marker({ element: el })
+      .setLngLat([userLocation.lng, userLocation.lat])
+      .addTo(map.current);
+
+    // Fly to user location
+    map.current.flyTo({
+      center: [userLocation.lng, userLocation.lat],
+      zoom: 12,
+      duration: 1000,
+    });
+  }, [userLocation]);
 
   // If Mapbox token is missing, use Leaflet + OpenStreetMap tiles as a free interactive fallback.
   const [leafletLoading, setLeafletLoading] = useState(false);
@@ -137,33 +167,9 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick }) => {
     };
   }, [networks, onNetworkClick]);
 
-  const handleNearMe = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          setUserLocation({ lat: latitude, lng: longitude });
-          if (map.current) {
-            map.current.flyTo({
-              center: [longitude, latitude],
-              zoom: 12,
-              duration: 1000,
-            });
-          }
-        },
-        (error) => {
-          console.error('Geolocation error:', error);
-          alert('Unable to get your location. Please enable location services.');
-        }
-      );
-    } else {
-      alert('Geolocation is not supported by your browser.');
-    }
-  };
-
   if (!mapboxgl.accessToken) {
     return (
-      <div ref={mapContainer} className="w-full h-full overflow-hidden bg-gray-50 flex items-center justify-center">
+      <div ref={mapContainer} className="w-full h-full overflow-hidden bg-gray-50 flex items-center justify-center map-grayscale">
         {leafletLoading ? <div className="text-sm text-gray-500">Loading map…</div> : null}
       </div>
     );
@@ -171,14 +177,7 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick }) => {
 
   return (
     <div className="w-full h-full relative">
-      <div ref={mapContainer} className="w-full h-full overflow-hidden absolute inset-0" style={{ filter: 'grayscale(100%) brightness(1.1)' }} />
-      <button 
-        onClick={handleNearMe}
-        className="absolute top-3 left-3 px-4 py-2.5 bg-torea-bay-700 text-white rounded-pill shadow-lg hover:shadow-xl transition-shadow flex items-center gap-2 font-semibold text-sm z-20"
-      >
-        <span>📍</span>
-        Near me
-      </button>
+      <div ref={mapContainer} className="w-full h-full overflow-hidden absolute inset-0 map-grayscale" />
     </div>
   );
 };

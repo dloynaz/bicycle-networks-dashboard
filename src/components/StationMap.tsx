@@ -20,64 +20,13 @@ type Station = {
 type StationMapProps = {
   stations: Station[];
   networkLocation: { latitude: number; longitude: number };
+  selectedStationId?: string;
+  onStationClick?: (stationId: string) => void;
+  userLocation?: { lat: number; lng: number } | null;
 };
 
-const StationMap: React.FC<StationMapProps> = ({ stations, networkLocation }) => {
+const StationMap: React.FC<StationMapProps> = ({ stations, networkLocation, selectedStationId, onStationClick, userLocation }) => {
   const mapContainer = useRef<HTMLDivElement | null>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const markers = useRef<mapboxgl.Marker[]>([]);
-
-  useEffect(() => {
-    if (!mapContainer.current) return;
-
-    if (!mapboxgl.accessToken) return;
-
-    if (!map.current) {
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/light-v11',
-        center: [networkLocation.longitude, networkLocation.latitude],
-        zoom: 12,
-      });
-
-      map.current.addControl(new mapboxgl.NavigationControl());
-    }
-
-    // Clear existing markers
-    markers.current.forEach((m) => m.remove());
-    markers.current = [];
-
-    stations.forEach((station) => {
-      const el = document.createElement('div');
-      el.className = 'station-marker';
-      el.style.width = '12px';
-      el.style.height = '12px';
-      el.style.background = '#FF7E5F';
-      el.style.borderRadius = '50%';
-      el.style.cursor = 'pointer';
-      el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
-
-      const marker = new mapboxgl.Marker(el)
-        .setLngLat([station.longitude, station.latitude])
-        .setPopup(
-          new mapboxgl.Popup({ offset: 12 }).setHTML(
-            `<strong>${station.name}</strong><br/>Free: ${station.free_bikes} • Empty: ${station.empty_slots}`
-          )
-        )
-        .addTo(map.current as mapboxgl.Map);
-
-      markers.current.push(marker);
-    });
-
-    return () => {
-      markers.current.forEach((m) => m.remove());
-      markers.current = [];
-      if (map.current) {
-        map.current.remove();
-        map.current = null;
-      }
-    };
-  }, [stations, networkLocation]);
 
   const [leafletLoading, setLeafletLoading] = useState(false);
   useEffect(() => {
@@ -107,14 +56,28 @@ const StationMap: React.FC<StationMapProps> = ({ stations, networkLocation }) =>
           // Create a custom div icon with coral styling
           const icon = L.divIcon({
             className: '',
-            html: `<div style="width: 12px; height: 12px; background-color: #FF7E5F; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); cursor: pointer;"></div>`,
+            html: `<div style="width: 12px; height: 12px; background-color: var(--accent); border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); cursor: pointer;"></div>`,
             iconSize: [12, 12],
             iconAnchor: [6, 6],
             popupAnchor: [0, -6],
           });
           
+          const popupHTML = `
+            <div class="station-popup-content">
+              <div class="station-popup-title">${station.name}</div>
+              <div class="station-popup-row">
+                <span class="station-popup-label">Free bikes</span>
+                <span class="station-popup-value">${station.free_bikes}</span>
+              </div>
+              <div class="station-popup-row">
+                <span class="station-popup-label">Empty slots</span>
+                <span class="station-popup-value">${station.empty_slots}</span>
+              </div>
+            </div>
+          `;
+          
           const marker = L.marker([station.latitude, station.longitude], { icon }).addTo(leafletMap);
-          marker.bindPopup(`<strong>${station.name}</strong><br/>Free: ${station.free_bikes} • Empty: ${station.empty_slots}`);
+          marker.bindPopup(popupHTML, { className: 'station-popup' });
           leafletMarkers.push(marker);
         });
       } catch (e) {
@@ -140,33 +103,22 @@ const StationMap: React.FC<StationMapProps> = ({ stations, networkLocation }) =>
 
   if (!mapboxgl.accessToken) {
     return (
-      <div className="w-full h-full relative bg-gray-50 flex items-center justify-center rounded-lg overflow-hidden">
+      <div className="w-full h-full relative bg-gray-50 flex items-center justify-center overflow-hidden">
         {leafletLoading ? <div className="text-sm text-gray-500">Loading map…</div> : <div className="text-sm text-gray-500">Mapbox token not set</div>}
-        <div ref={mapContainer} className="w-full h-full absolute inset-0" />
+        <div ref={mapContainer} className="w-full h-full absolute inset-0 map-grayscale" />
       </div>
     );
   }
 
   return (
     <div className="w-full h-full relative">
-      <div ref={mapContainer} className="w-full h-full absolute inset-0" style={{ filter: 'grayscale(100%) brightness(1.1)' }} />
-      <button 
-        onClick={() => {
-          if (map.current) {
-            map.current.flyTo({
-              center: [networkLocation.longitude, networkLocation.latitude],
-              zoom: 13,
-              duration: 1000,
-            });
-          }
-        }}
-        className="absolute top-3 left-3 px-4 py-2.5 bg-torea-bay-700 text-white rounded-pill shadow-lg hover:shadow-xl transition-shadow flex items-center gap-2 font-semibold text-sm z-20"
-      >
-        <span>📍</span>
-        Near me
-      </button>
+      <div ref={mapContainer} className="w-full h-full absolute inset-0 map-grayscale" />
     </div>
   );
 };
 
+// Pan to selected station when provided
+// Separate effect to avoid remounting the entire map
+// and ensure smooth focus updates
 export default StationMap;
+

@@ -17,7 +17,7 @@ const Pagination: React.FC<Props> = ({ current, total, onPage }) => {
       <button 
         onClick={() => onPage(Math.max(1, current - 1))} 
         disabled={current === 1} 
-        className="p-1.5 text-torea-bay-800 disabled:text-zinc-300 disabled:cursor-not-allowed hover:text-torea-bay-700 transition"
+        className="p-1.5 text-primary disabled:text-zinc-300 disabled:cursor-not-allowed hover:text-secondary transition cursor-pointer"
       >
         <ChevronLeft className="w-5 h-5" strokeWidth={1.5} />
       </button>
@@ -31,7 +31,7 @@ const Pagination: React.FC<Props> = ({ current, total, onPage }) => {
             <button 
               key={pageNum} 
               onClick={() => onPage(pageNum)} 
-              className={isSelected ? 'w-8 h-8 rounded-lg font-bold text-sm bg-torea-bay-800 text-white shadow-md transition-all' : 'w-8 h-8 rounded-lg font-bold text-sm bg-white border-2 border-zinc-200 text-torea-bay-800 hover:border-zinc-300 transition-all'}
+              className={isSelected ? 'w-8 h-8 rounded-lg font-bold text-sm bg-primary text-primary-foreground shadow-md transition-all cursor-pointer' : 'w-8 h-8 rounded-lg font-bold text-sm bg-white border-2 border-zinc-200 text-primary hover:border-zinc-300 transition-all cursor-pointer'}
             >
               {pageNum}
             </button>
@@ -43,7 +43,7 @@ const Pagination: React.FC<Props> = ({ current, total, onPage }) => {
       <button 
         onClick={() => onPage(Math.min(total, current + 1))} 
         disabled={current === total} 
-        className="p-1.5 text-torea-bay-800 disabled:text-zinc-300 disabled:cursor-not-allowed hover:text-torea-bay-700 transition"
+        className="p-1.5 text-primary disabled:text-zinc-300 disabled:cursor-not-allowed hover:text-secondary transition cursor-pointer"
       >
         <ChevronRight className="w-5 h-5" strokeWidth={1.5} />
       </button>
