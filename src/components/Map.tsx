@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import 'leaflet/dist/leaflet.css';
@@ -17,15 +17,24 @@ type MapProps = {
   userLocation?: { lat: number; lng: number } | null;
 };
 
+// Map renders the overview map with network markers and optional user location.
 const Map: React.FC<MapProps> = ({ networks, onNetworkClick, userLocation }) => {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
   const userMarker = useRef<mapboxgl.Marker | null>(null);
+  const hasMapboxToken = Boolean(mapboxgl.accessToken);
+
+  // Clear all network markers from the map.
+  const clearMarkers = useCallback(() => {
+    markers.current.forEach((m) => m.remove());
+    markers.current = [];
+  }, []);
 
   useEffect(() => {
-    if (!mapContainer.current || !mapboxgl.accessToken) return;
+    if (!mapContainer.current || !hasMapboxToken) return;
 
+    // Initialize the Mapbox map once.
     if (!map.current) {
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
@@ -36,8 +45,7 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick, userLocation }) => 
     }
 
     return () => {
-      markers.current.forEach((m) => m.remove());
-      markers.current = [];
+      clearMarkers();
       if (userMarker.current) {
         userMarker.current.remove();
         userMarker.current = null;
@@ -46,23 +54,18 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick, userLocation }) => 
         try {
           map.current.remove();
         } catch (e) {
-          // ignore
         }
         map.current = null;
       }
     };
-    // run once for init/unmount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [clearMarkers, hasMapboxToken]);
 
-  // Manage markers whenever networks change
   useEffect(() => {
     if (!map.current) return;
 
-    // clear previous markers
-    markers.current.forEach((m) => m.remove());
-    markers.current = [];
+    clearMarkers();
 
+    // Render a marker and popup for each network.
     networks.forEach((network) => {
       if (!network.location || !network.location.latitude || !network.location.longitude) return;
       const el = document.createElement('div');
@@ -83,18 +86,15 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick, userLocation }) => 
       marker.setPopup(popup);
       markers.current.push(marker);
     });
-  }, [networks, onNetworkClick]);
+  }, [clearMarkers, networks, onNetworkClick]);
 
-  // Handle user location updates
   useEffect(() => {
     if (!map.current || !userLocation) return;
 
-    // Remove previous user marker if exists
     if (userMarker.current) {
       userMarker.current.remove();
     }
 
-    // Create user location marker
     const el = document.createElement('div');
     el.className = 'w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-lg';
     el.style.boxShadow = '0 0 0 4px rgba(59, 130, 246, 0.2)';
@@ -103,7 +103,6 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick, userLocation }) => 
       .setLngLat([userLocation.lng, userLocation.lat])
       .addTo(map.current);
 
-    // Fly to user location
     map.current.flyTo({
       center: [userLocation.lng, userLocation.lat],
       zoom: 12,
@@ -111,10 +110,11 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick, userLocation }) => 
     });
   }, [userLocation]);
 
-  // If Mapbox token is missing, use Leaflet + OpenStreetMap tiles as a free interactive fallback.
+  // Leaflet fallback state for environments without a Mapbox token.
   const [leafletLoading, setLeafletLoading] = useState(false);
+  const [leafletError, setLeafletError] = useState<string | null>(null);
   useEffect(() => {
-    if (mapboxgl.accessToken) return; // Leaflet fallback only when no token
+    if (hasMapboxToken) return;
     if (!mapContainer.current) return;
 
     let leafletMap: any = null;
@@ -124,6 +124,7 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick, userLocation }) => 
     const loadLeaflet = async () => {
       try {
         setLeafletLoading(true);
+        setLeafletError(null);
         const L = (await import('leaflet')) as any;
 
         if (!mounted) return;
@@ -134,7 +135,6 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick, userLocation }) => 
 
         networks.forEach((network) => {
           if (!network.location?.latitude || !network.location?.longitude) return;
-          // use a div icon to avoid default image asset issues
           const icon = L.divIcon({
             className: 'leaflet-custom-icon',
             html: `<div class="marker-dot marker-dot-network"></div>`,
@@ -148,7 +148,7 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick, userLocation }) => 
           leafletMarkers.push(marker);
         });
       } catch (e) {
-        console.error('Leaflet fallback failed', e);
+        setLeafletError('Unable to load the fallback map.');
       } finally {
         if (mounted) setLeafletLoading(false);
       }
@@ -162,15 +162,15 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick, userLocation }) => 
         leafletMarkers.forEach((m) => m.remove());
         if (leafletMap) leafletMap.remove();
       } catch (e) {
-        // ignore
       }
     };
-  }, [networks, onNetworkClick]);
+  }, [hasMapboxToken, networks, onNetworkClick]);
 
-  if (!mapboxgl.accessToken) {
+  if (!hasMapboxToken) {
     return (
       <div ref={mapContainer} className="w-full h-full overflow-hidden bg-gray-50 flex items-center justify-center map-grayscale">
         {leafletLoading ? <div className="text-sm text-gray-500">Loading map…</div> : null}
+        {!leafletLoading && leafletError ? <div className="text-sm text-gray-500">{leafletError}</div> : null}
       </div>
     );
   }

@@ -1,4 +1,4 @@
-import React from 'react';
+import { notFound } from 'next/navigation';
 import { fetchNetworkById } from '../../../lib/api';
 import type { Network } from '../../../types';
 import NetworkDetailClient from '../../../components/NetworkDetailClient';
@@ -7,21 +7,20 @@ type Props = {
   params: { id: string };
 };
 
+// NetworkDetail fetches network data and renders the client detail view.
 export default async function NetworkDetail({ params }: Props) {
-  // `params` may be a Promise in some Next.js configurations; unwrap it first.
+  // Normalize params across Next.js configurations.
   const resolvedParams = (await params) as { id?: string };
   const id = resolvedParams?.id;
   if (!id) {
-    console.warn('[NetworkDetail] missing params.id', resolvedParams);
-    return <div className="min-h-screen bg-background text-neutral font-sans p-4">Network not found</div>;
+    notFound();
   }
 
+  // Server-side fetch to hydrate the client detail view.
   const network: Network | null = await fetchNetworkById(id);
 
   if (!network) {
-    return (
-      <div className="min-h-screen bg-background text-neutral font-sans p-4">Network not found</div>
-    );
+    notFound();
   }
 
   return <NetworkDetailClient network={network} />;

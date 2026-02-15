@@ -1,3 +1,4 @@
+// Station represents a single bike station with capacity data.
 export interface Station {
   id: string;
   name: string;
@@ -7,6 +8,7 @@ export interface Station {
   longitude: number;
 }
 
+// NetworkLocation captures the geographic location of a network.
 export interface NetworkLocation {
   city: string;
   country: string;
@@ -14,6 +16,7 @@ export interface NetworkLocation {
   longitude: number;
 }
 
+// Network is the primary domain model used across the app.
 export interface Network {
   id: string;
   name: string;

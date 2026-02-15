@@ -1,44 +1,73 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, MapPin, Building } from 'lucide-react';
 import StationMap from './StationMap';
 import type { Network } from '../types';
+import { getPageNumbers } from '../lib/pagination';
 
 type Props = {
   network: Network;
 };
 
+// NetworkDetailClient renders the network detail view with station table and map.
 export default function NetworkDetailClient({ network }: Props) {
   const [sortBy, setSortBy] = useState<'free_bikes' | 'empty_slots'>('free_bikes');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
-  const [stationsPerPage] = useState(10);
   const router = useRouter();
+  const stationsPerPage = 10;
+  const companyLabel = network.company?.length ? network.company.join(', ') : 'Unknown operator';
+  const locationLabel = [network.location.city, network.location.country].filter(Boolean).join(', ') || 'Unknown location';
 
-  const sortedStations = [...(network.stations || [])].sort((a, b) => {
-    const value = sortBy === 'free_bikes' ? a.free_bikes - b.free_bikes : a.empty_slots - b.empty_slots;
-    return sortOrder === 'asc' ? value : -value;
-  });
+  // Sort stations based on the active column and direction.
+  const sortedStations = useMemo(() => {
+    return [...(network.stations || [])].sort((a, b) => {
+      const value = sortBy === 'free_bikes' ? a.free_bikes - b.free_bikes : a.empty_slots - b.empty_slots;
+      return sortOrder === 'asc' ? value : -value;
+    });
+  }, [network.stations, sortBy, sortOrder]);
 
-  const indexOfLastStation = currentPage * stationsPerPage;
-  const indexOfFirstStation = indexOfLastStation - stationsPerPage;
-  const currentStations = sortedStations.slice(indexOfFirstStation, indexOfLastStation);
-  const totalPages = Math.ceil(sortedStations.length / stationsPerPage);
+  // Compute pagination metadata for the station table.
+  const totalPages = useMemo(() => Math.ceil(sortedStations.length / stationsPerPage), [sortedStations.length, stationsPerPage]);
+
+  // Slice the sorted list into a single page of stations.
+  const currentStations = useMemo(() => {
+    const indexOfLastStation = currentPage * stationsPerPage;
+    const indexOfFirstStation = indexOfLastStation - stationsPerPage;
+    return sortedStations.slice(indexOfFirstStation, indexOfLastStation);
+  }, [currentPage, stationsPerPage, sortedStations]);
+
+  // Limit visible page buttons to avoid overflow.
+  const pageNumbers = useMemo(() => getPageNumbers(currentPage, totalPages, 5), [currentPage, totalPages]);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [sortBy, sortOrder]);
 
-  const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
+  const handleSortByFreeBikes = useCallback(() => {
+    if (sortBy === 'free_bikes') {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy('free_bikes');
+      setSortOrder('desc');
+    }
+  }, [sortBy]);
+
+  const handleSortByEmptySlots = useCallback(() => {
+    if (sortBy === 'empty_slots') {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy('empty_slots');
+      setSortOrder('desc');
+    }
+  }, [sortBy]);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="min-h-screen bg-zinc-50 font-sans flex overflow-hidden h-screen relative">
-      {/* Sidebar */}
       <aside className="w-[551px] bg-[#1c2266] overflow-hidden flex flex-col">
-        {/* Media Header with Gradient */}
         <div className="relative h-44">
           <div
             className="absolute inset-0"
@@ -56,16 +85,15 @@ export default function NetworkDetailClient({ network }: Props) {
             <h2 className="text-2xl font-bold text-white">{network.name}</h2>
             <p className="text-xs text-white/80 mt-1 flex items-center gap-2">
               <MapPin className="w-4 h-4 text-white/90" strokeWidth={2} />
-              {network.location.city}, {network.location.country}
+              {locationLabel}
             </p>
             <p className="text-xs text-white/80 mt-1 flex items-center gap-2">
               <Building className="w-4 h-4 text-white/90 flex-shrink-0" strokeWidth={2} />
-              <span className="truncate">{network.company.join(', ')}</span>
+              <span className="truncate">{companyLabel}</span>
             </p>
           </div>
         </div>
 
-        {/* All Stations Counter */}
         <div className="px-6 py-4">
           <div className="inline-flex items-center gap-2">
             <span className="text-sm text-white/90">All</span>
@@ -76,7 +104,6 @@ export default function NetworkDetailClient({ network }: Props) {
           </div>
         </div>
 
-        {/* Stations Table - single table to align columns */}
         <div className="flex-1 overflow-y-auto">
           <table className="w-full text-xs table-fixed text-white">
             <colgroup>
@@ -89,14 +116,7 @@ export default function NetworkDetailClient({ network }: Props) {
                 <th className="text-left py-3 px-6 font-bold tracking-wide uppercase text-white/90">Station Name</th>
                 <th 
                   className="text-center py-3 px-6 font-bold tracking-wide uppercase whitespace-nowrap text-white/90 cursor-pointer hover:text-white transition-colors"
-                  onClick={() => {
-                    if (sortBy === 'free_bikes') {
-                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortBy('free_bikes');
-                      setSortOrder('desc');
-                    }
-                  }}
+                  onClick={handleSortByFreeBikes}
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>Free Bikes</span>
@@ -105,14 +125,7 @@ export default function NetworkDetailClient({ network }: Props) {
                 </th>
                 <th 
                   className="text-center py-3 px-6 font-bold tracking-wide uppercase whitespace-nowrap text-white/90 cursor-pointer hover:text-white transition-colors"
-                  onClick={() => {
-                    if (sortBy === 'empty_slots') {
-                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortBy('empty_slots');
-                      setSortOrder('desc');
-                    }
-                  }}
+                  onClick={handleSortByEmptySlots}
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>Empty Slots</span>
@@ -125,8 +138,7 @@ export default function NetworkDetailClient({ network }: Props) {
               {currentStations.map((station) => (
                 <tr
                   key={station.id}
-                  className="group border-b border-white/20 border-dashed cursor-pointer transition-colors duration-200 hover:bg-white/5"
-                  onClick={() => setSelectedStationId(station.id)}
+                  className="group border-b border-white/20 border-dashed transition-colors duration-200 hover:bg-white/5"
                 >
                   <td className="p-4 px-6 font-medium text-white relative overflow-hidden">
                     <span className="inline-block transition-transform duration-300 ease-out group-hover:translate-x-2">
@@ -141,7 +153,6 @@ export default function NetworkDetailClient({ network }: Props) {
           </table>
         </div>
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className="px-6 py-4">
             <div className="flex justify-center items-center gap-2">
@@ -154,9 +165,7 @@ export default function NetworkDetailClient({ network }: Props) {
               </button>
               
               <div className="flex gap-1">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const pageNum = currentPage > 3 ? currentPage - 2 + i : i + 1;
-                  if (pageNum > totalPages) return null;
+                {pageNumbers.map((pageNum) => {
                   const isSelected = currentPage === pageNum;
                   return (
                     <button 
@@ -185,14 +194,10 @@ export default function NetworkDetailClient({ network }: Props) {
         )}
       </aside>
 
-      {/* Map Container - Full Screen */}
       <main className="flex-1 overflow-hidden relative">
         <StationMap 
           stations={network.stations || []} 
           networkLocation={network.location} 
-          selectedStationId={selectedStationId ?? undefined}
-          onStationClick={setSelectedStationId}
-          userLocation={null} 
         />
       </main>
     </motion.div>

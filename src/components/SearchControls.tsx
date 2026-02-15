@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, MapPin } from 'lucide-react';
 import countryData from '../data/countries.json';
 
@@ -9,15 +9,19 @@ type Props = {
   onCountryChange: (v: string) => void;
 };
 
+// SearchControls provides the network search box and country filter dropdown.
 const SearchControls: React.FC<Props> = ({ search, selectedCountry, onSearchChange, onCountryChange }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const filteredCountries = countryData.data.filter((country) =>
-    country.name.toLowerCase().includes(countrySearch.toLowerCase())
+  // Filter country list by the local dropdown search term.
+  const filteredCountries = useMemo(
+    () => countryData.data.filter((country) => country.name.toLowerCase().includes(countrySearch.toLowerCase())),
+    [countrySearch]
   );
 
+  // Close the dropdown when clicking outside the control.
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -29,15 +33,21 @@ const SearchControls: React.FC<Props> = ({ search, selectedCountry, onSearchChan
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleCountrySelect = (countryName: string) => {
-    onCountryChange(countryName);
-    setIsDropdownOpen(false);
-    setCountrySearch('');
-  };
+  const handleCountrySelect = useCallback(
+    (countryName: string) => {
+      onCountryChange(countryName);
+      setIsDropdownOpen(false);
+      setCountrySearch('');
+    },
+    [onCountryChange]
+  );
+
+  const handleToggleDropdown = useCallback(() => {
+    setIsDropdownOpen((prev) => !prev);
+  }, []);
 
   return (
     <div className="flex items-center gap-6">
-      {/* Search Input */}
       <div className="relative flex-1 min-w-0">
         <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-secondary" />
         <input
@@ -49,11 +59,10 @@ const SearchControls: React.FC<Props> = ({ search, selectedCountry, onSearchChan
         />
       </div>
 
-      {/* Country Select with Custom Dropdown */}
       <div className="relative w-[150px] flex-none" ref={dropdownRef}>
         <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-secondary z-10 pointer-events-none" />
         <button
-          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+          onClick={handleToggleDropdown}
           className="w-full h-12 pl-14 pr-5 bg-white rounded-pill border border-zinc-200 focus:outline-none focus:ring-4 focus:ring-primary/20 text-sm text-secondary cursor-pointer text-left"
         >
           {selectedCountry || 'Country'}
@@ -61,7 +70,6 @@ const SearchControls: React.FC<Props> = ({ search, selectedCountry, onSearchChan
         
         {isDropdownOpen && (
           <div className="absolute top-full mt-2 w-full bg-white rounded-lg shadow-lg border border-zinc-200 z-50 overflow-hidden">
-            {/* Search Country Input */}
             <div className="p-3 border-b border-zinc-200">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
@@ -76,7 +84,6 @@ const SearchControls: React.FC<Props> = ({ search, selectedCountry, onSearchChan
               </div>
             </div>
             
-            {/* Country List */}
             <div className="max-h-64 overflow-y-auto">
               <button
                 onClick={() => handleCountrySelect('')}

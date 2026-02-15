@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { getPageNumbers } from '../lib/pagination';
 
 type Props = {
   current: number;
@@ -7,10 +8,12 @@ type Props = {
   onPage: (n: number) => void;
 };
 
+// Pagination renders page navigation controls for list views.
 const Pagination: React.FC<Props> = ({ current, total, onPage }) => {
   if (total <= 1) return null;
   
-  const pages = Math.min(5, total);
+  // Limit the number of visible page buttons for compact UI.
+  const pages = useMemo(() => getPageNumbers(current, total, 5), [current, total]);
   
   return (
     <div className="flex justify-center items-center gap-2">
@@ -23,9 +26,7 @@ const Pagination: React.FC<Props> = ({ current, total, onPage }) => {
       </button>
       
       <div className="flex gap-1">
-        {Array.from({ length: pages }, (_, i) => {
-          const pageNum = current > 3 ? current - 2 + i : i + 1;
-          if (pageNum > total) return null;
+        {pages.map((pageNum) => {
           const isSelected = current === pageNum;
           return (
             <button 

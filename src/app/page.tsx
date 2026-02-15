@@ -1,27 +1,30 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { MapPin, Building, ArrowRight, Locate, Bike } from 'lucide-react';
+import { Locate, Bike } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Map from '../components/Map';
 import countryData from '../data/countries.json';
-import Header from '../components/Header';
 import SearchControls from '../components/SearchControls';
 import NetworkCard from '../components/NetworkCard';
 import Pagination from '../components/Pagination';
 import { fetchNetworks } from '../lib/api';
-import type { Network } from '../types';
+import type { Network as BikeNetwork } from '../types';
 
+const NETWORKS_PER_PAGE = 12;
+
+// HomePage renders the main networks dashboard with filters, list, pagination, and map.
 const HomePage = () => {
   const router = useRouter();
-  const [networks, setNetworks] = useState<Network[]>([]);
+  const [networks, setNetworks] = useState<BikeNetwork[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selectedCountry, setSelectedCountry] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [networksPerPage] = useState(12);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
 
+  // Initialize client state from URL params for shareable state.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setSearch(params.get('search') || '');
@@ -29,21 +32,26 @@ const HomePage = () => {
     setCurrentPage(parseInt(params.get('page') || '1'));
   }, []);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const data = await fetchNetworks();
-        setNetworks(data);
-      } catch (error) {
-        console.error('Error fetching networks:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+  const loadNetworks = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await fetchNetworks();
+      setNetworks(data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to load networks.';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  // Fetch network list on mount.
+  useEffect(() => {
+    loadNetworks();
+  }, [loadNetworks]);
+
+  // Keep URL in sync with filters and pagination.
   useEffect(() => {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
@@ -54,17 +62,18 @@ const HomePage = () => {
     router.replace(queryString ? `/?${queryString}` : '/');
   }, [search, selectedCountry, currentPage, router]);
 
-  const handleCountryChange = (value: string) => {
+  const handleCountryChange = useCallback((value: string) => {
     setSelectedCountry(value);
     setCurrentPage(1);
-  };
+  }, []);
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearch(e.target.value);
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value);
     setCurrentPage(1);
-  };
+  }, []);
 
-  const filteredNetworks = useMemo(() => {
+  // Apply search and country filters client-side.
+  const filteredNetworks = useMemo<BikeNetwork[]>(() => {
     return networks.filter((network) => {
       const matchesSearch =
         network.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -98,11 +107,25 @@ const HomePage = () => {
     });
   }, [networks, search, selectedCountry]);
 
-  const indexOfLastNetwork = currentPage * networksPerPage;
-  const indexOfFirstNetwork = indexOfLastNetwork - networksPerPage;
-  const currentNetworks = filteredNetworks.slice(indexOfFirstNetwork, indexOfLastNetwork);
-  const totalPages = Math.ceil(filteredNetworks.length / networksPerPage);
+  // Derive pagination values from filtered results.
+  const totalPages = useMemo(
+    () => Math.ceil(filteredNetworks.length / NETWORKS_PER_PAGE),
+    [filteredNetworks.length]
+  );
 
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages || 1);
+    }
+  }, [currentPage, totalPages]);
+
+  const currentNetworks = useMemo<BikeNetwork[]>(() => {
+    const indexOfLastNetwork = currentPage * NETWORKS_PER_PAGE;
+    const indexOfFirstNetwork = indexOfLastNetwork - NETWORKS_PER_PAGE;
+    return filteredNetworks.slice(indexOfFirstNetwork, indexOfLastNetwork);
+  }, [currentPage, filteredNetworks]);
+
+  // Navigate to the network detail page.
   const handleNetworkClick = useCallback(
     (id: string) => {
       router.push(`/network/${id}`);
@@ -111,26 +134,27 @@ const HomePage = () => {
   );
 
   const mapNetworks = useMemo(
-    () => filteredNetworks.map((n) => ({ id: n.id, name: n.name, location: n.location })),
+    () => filteredNetworks.map((n: BikeNetwork) => ({ id: n.id, name: n.name, location: n.location })),
     [filteredNetworks]
   );
 
-  const handleNearMe = () => {
-    console.log('Near me button clicked');
+  // Locate the user and navigate to the nearest network.
+  const handleNearMe = useCallback(() => {
     if (!navigator.geolocation) {
-      console.log('Geolocation not supported');
       alert('Geolocation is not supported by your browser.');
       return;
     }
-    console.log('Requesting geolocation...');
+    if (filteredNetworks.length === 0) {
+      alert('No networks are available to search nearby.');
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
-        console.log('Location received:', { latitude, longitude });
         setUserLocation({ lat: latitude, lng: longitude });
         
         // Find nearest network
-        let nearestNetwork = null;
+        let nearestNetworkId: string | null = null;
         let minDistance = Infinity;
         
         filteredNetworks.forEach((network) => {
@@ -148,25 +172,21 @@ const HomePage = () => {
             
             if (distance < minDistance) {
               minDistance = distance;
-              nearestNetwork = network;
+              nearestNetworkId = network.id;
             }
           }
         });
         
-        if (nearestNetwork) {
-          console.log('Nearest network:', nearestNetwork.name, 'Distance:', minDistance.toFixed(2), 'km');
+        if (nearestNetworkId) {
           // Navigate to nearest network detail page
-          router.push(`/network/${nearestNetwork.id}`);
-        } else {
-          console.log('No networks found nearby');
+          router.push(`/network/${nearestNetworkId}`);
         }
       },
       (error) => {
-        console.error('Geolocation error:', error);
         alert('Unable to get your location. Please enable location services.');
       }
     );
-  };
+  }, [filteredNetworks, router]);
 
   return (
     <div className="h-screen w-screen bg-zinc-50 text-zinc-950 font-sans flex overflow-hidden relative">
@@ -184,15 +204,14 @@ const HomePage = () => {
           <SearchControls
             search={search}
             selectedCountry={selectedCountry}
-            onSearchChange={(v) => setSearch(v)}
-            onCountryChange={(v) => handleCountryChange(v)}
+            onSearchChange={handleSearchChange}
+            onCountryChange={handleCountryChange}
           />
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0">
           <div className="px-0 py-0 space-y-0">
             {loading ? (
-              // Loading skeleton
               Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="px-4 py-4 border-b border-zinc-200 animate-pulse">
                   <div className="flex items-start gap-3">
@@ -205,6 +224,17 @@ const HomePage = () => {
                   </div>
                 </div>
               ))
+            ) : error ? (
+              <div className="text-center py-8 text-zinc-500">
+                <p className="text-sm">{error}</p>
+                <button
+                  type="button"
+                  onClick={loadNetworks}
+                  className="mt-3 inline-flex items-center justify-center rounded-pill border border-zinc-200 bg-white px-4 py-2 text-xs font-semibold text-primary hover:bg-zinc-50"
+                >
+                  Try again
+                </button>
+              </div>
             ) : currentNetworks.length > 0 ? (
               currentNetworks.map((network) => (
                 <NetworkCard key={network.id} network={network} onClick={handleNetworkClick} />
@@ -230,7 +260,6 @@ const HomePage = () => {
         />
       </main>
 
-      {/* Near me button - positioned absolutely at page level, desktop only */}
       <button 
         onClick={handleNearMe}
         className="hidden md:flex px-4 py-2.5 bg-primary text-primary-foreground rounded-pill shadow-lg hover:shadow-xl transition-shadow items-center gap-2 font-semibold text-sm z-[9999] cursor-pointer"
