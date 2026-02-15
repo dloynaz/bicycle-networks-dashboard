@@ -27,6 +27,8 @@ const StationMap: React.FC<StationMapProps> = ({ stations, networkLocation }) =>
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
   const hasMapboxToken = Boolean(mapboxgl.accessToken);
+  const preferLeaflet = process.env.NEXT_PUBLIC_MAP_PROVIDER === 'leaflet';
+  const useMapbox = hasMapboxToken && !preferLeaflet;
 
   const clearMarkers = useCallback(() => {
     markers.current.forEach((m) => m.remove());
@@ -34,7 +36,7 @@ const StationMap: React.FC<StationMapProps> = ({ stations, networkLocation }) =>
   }, []);
 
   useEffect(() => {
-    if (!mapContainer.current || !hasMapboxToken) return;
+    if (!mapContainer.current || !useMapbox) return;
 
     if (!map.current) {
       map.current = new mapboxgl.Map({
@@ -42,6 +44,12 @@ const StationMap: React.FC<StationMapProps> = ({ stations, networkLocation }) =>
         style: 'mapbox://styles/mapbox/light-v11',
         center: [networkLocation.longitude, networkLocation.latitude],
         zoom: 12,
+        attributionControl: false,
+        antialias: false,
+        maxPitch: 0,
+        pitchWithRotate: false,
+        dragRotate: false,
+        touchPitch: false,
       });
     }
 
@@ -55,10 +63,10 @@ const StationMap: React.FC<StationMapProps> = ({ stations, networkLocation }) =>
         map.current = null;
       }
     };
-  }, [clearMarkers, hasMapboxToken, networkLocation.latitude, networkLocation.longitude]);
+  }, [clearMarkers, useMapbox, networkLocation.latitude, networkLocation.longitude]);
 
   useEffect(() => {
-    if (!map.current) return;
+    if (!map.current || !useMapbox) return;
 
     clearMarkers();
 
@@ -98,23 +106,23 @@ const StationMap: React.FC<StationMapProps> = ({ stations, networkLocation }) =>
       });
       markers.current.push(marker);
     });
-  }, [clearMarkers, stations]);
+  }, [clearMarkers, stations, useMapbox]);
 
   useEffect(() => {
-    if (!map.current) return;
+    if (!map.current || !useMapbox) return;
 
     map.current.flyTo({
       center: [networkLocation.longitude, networkLocation.latitude],
       zoom: 12,
       duration: 800,
     });
-  }, [networkLocation.latitude, networkLocation.longitude]);
+  }, [networkLocation.latitude, networkLocation.longitude, useMapbox]);
 
   // Leaflet fallback loading state when Mapbox token is unavailable.
   const [leafletLoading, setLeafletLoading] = useState(false);
   const [leafletError, setLeafletError] = useState<string | null>(null);
   useEffect(() => {
-    if (hasMapboxToken) return;
+    if (useMapbox) return;
     if (!mapContainer.current) return;
 
     let L: any = null;
@@ -131,8 +139,14 @@ const StationMap: React.FC<StationMapProps> = ({ stations, networkLocation }) =>
         if (!mounted) return;
         // Initialize Leaflet map at the network location.
         leafletMap = L.map(mapContainer.current!, { center: [networkLocation.latitude, networkLocation.longitude], zoom: 12 });
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap contributors',
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+        }).addTo(leafletMap);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+          opacity: 0.9,
+          minZoom: 3,
         }).addTo(leafletMap);
 
         stations.forEach((station) => {
@@ -182,14 +196,19 @@ const StationMap: React.FC<StationMapProps> = ({ stations, networkLocation }) =>
       } catch (e) {
       }
     };
-  }, [hasMapboxToken, stations, networkLocation]);
+  }, [useMapbox, stations, networkLocation]);
 
-  if (!hasMapboxToken) {
+  if (!useMapbox) {
     return (
       <div className="w-full h-full relative bg-gray-50 flex items-center justify-center overflow-hidden">
         {leafletLoading ? <div className="text-sm text-gray-500">Loading map…</div> : null}
         {!leafletLoading && leafletError ? <div className="text-sm text-gray-500">{leafletError}</div> : null}
-        {!leafletLoading && !leafletError ? <div className="text-sm text-gray-500">Mapbox token not set</div> : null}
+        {!leafletLoading && !leafletError && preferLeaflet ? (
+          <div className="text-sm text-gray-500">Using lightweight map tiles</div>
+        ) : null}
+        {!leafletLoading && !leafletError && !preferLeaflet ? (
+          <div className="text-sm text-gray-500">Mapbox token not set</div>
+        ) : null}
         <div ref={mapContainer} className="w-full h-full absolute inset-0 map-grayscale" />
       </div>
     );
