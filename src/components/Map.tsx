@@ -70,6 +70,9 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick, userLocation }) => 
       if (!network.location || !network.location.latitude || !network.location.longitude) return;
       const el = document.createElement('div');
       el.className = 'w-3.5 h-3.5 bg-accent rounded-full cursor-pointer hover:opacity-90 transition shadow-md';
+      el.setAttribute('role', 'button');
+      el.setAttribute('tabindex', '0');
+      el.setAttribute('aria-label', `Open ${network.name} details`);
 
       const marker = new mapboxgl.Marker({ element: el })
         .setLngLat([network.location.longitude, network.location.latitude])
@@ -77,6 +80,12 @@ const Map: React.FC<MapProps> = ({ networks, onNetworkClick, userLocation }) => 
 
       el.addEventListener('click', () => {
         onNetworkClick(network.id);
+      });
+      el.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onNetworkClick(network.id);
+        }
       });
 
       const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(

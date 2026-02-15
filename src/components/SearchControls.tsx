@@ -13,6 +13,7 @@ type Props = {
 const SearchControls: React.FC<Props> = ({ search, selectedCountry, onSearchChange, onCountryChange }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
+  const [searchInput, setSearchInput] = useState(search);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Filter country list by the local dropdown search term.
@@ -32,6 +33,17 @@ const SearchControls: React.FC<Props> = ({ search, selectedCountry, onSearchChan
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    setSearchInput(search);
+  }, [search]);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      onSearchChange(searchInput);
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [onSearchChange, searchInput]);
 
   const handleCountrySelect = useCallback(
     (countryName: string) => {
@@ -53,8 +65,9 @@ const SearchControls: React.FC<Props> = ({ search, selectedCountry, onSearchChan
         <input
           type="text"
           placeholder="Search network"
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          aria-label="Search networks"
           className="w-full h-12 pl-14 pr-5 bg-white rounded-pill border border-zinc-200 focus:outline-none focus:ring-4 focus:ring-primary/20 text-sm text-secondary placeholder:text-secondary/60"
         />
       </div>
@@ -63,13 +76,21 @@ const SearchControls: React.FC<Props> = ({ search, selectedCountry, onSearchChan
         <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-secondary z-10 pointer-events-none" />
         <button
           onClick={handleToggleDropdown}
+          aria-haspopup="listbox"
+          aria-expanded={isDropdownOpen}
+          aria-controls="country-filter-list"
           className="w-full h-12 pl-14 pr-5 bg-white rounded-pill border border-zinc-200 focus:outline-none focus:ring-4 focus:ring-primary/20 text-sm text-secondary cursor-pointer text-left"
         >
           {selectedCountry || 'Country'}
         </button>
         
         {isDropdownOpen && (
-          <div className="absolute top-full mt-2 w-full bg-white rounded-lg shadow-lg border border-zinc-200 z-50 overflow-hidden">
+          <div
+            id="country-filter-list"
+            role="listbox"
+            aria-label="Country filter"
+            className="absolute top-full mt-2 w-full bg-white rounded-lg shadow-lg border border-zinc-200 z-50 overflow-hidden"
+          >
             <div className="p-3 border-b border-zinc-200">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
@@ -78,6 +99,7 @@ const SearchControls: React.FC<Props> = ({ search, selectedCountry, onSearchChan
                   placeholder="Search country"
                   value={countrySearch}
                   onChange={(e) => setCountrySearch(e.target.value)}
+                  aria-label="Filter countries"
                   className="w-full h-9 pl-10 pr-3 bg-white rounded border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm text-zinc-900 placeholder:text-zinc-400"
                   autoFocus
                 />
@@ -87,6 +109,8 @@ const SearchControls: React.FC<Props> = ({ search, selectedCountry, onSearchChan
             <div className="max-h-64 overflow-y-auto">
               <button
                 onClick={() => handleCountrySelect('')}
+                role="option"
+                aria-selected={!selectedCountry}
                 className="w-full px-4 py-2.5 text-left text-sm text-zinc-900 hover:bg-zinc-50 transition-colors cursor-pointer"
               >
                 Country
@@ -95,6 +119,8 @@ const SearchControls: React.FC<Props> = ({ search, selectedCountry, onSearchChan
                 <button
                   key={country.code}
                   onClick={() => handleCountrySelect(country.name)}
+                  role="option"
+                  aria-selected={selectedCountry === country.name}
                   className="w-full px-4 py-2.5 text-left text-sm text-zinc-900 hover:bg-zinc-50 transition-colors cursor-pointer"
                 >
                   {country.name}

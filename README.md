@@ -1,57 +1,5 @@
 # Bicycle Networks Dashboard
 
-This is an implementation of the Front-end Code Challenge: a Next.js + TypeScript + Tailwind app that lists bicycle networks and shows network details.
-
-Features implemented
-- List of networks fetched from https://api.citybik.es/v2/networks
-- Search by network name and company (keyword stored in URL)
-- Country filter (single country, stored in URL)
-- Pagination for lists (networks and stations)
-- Network detail view with stations list, sorting and pagination
-- Map placeholders using Mapbox GL (markers for networks and stations)
-- Type-safe helpers and normalization of API responses
-
-Important notes
-- Mapbox: the project uses Mapbox GL for maps. Set `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` in your environment to see interactive maps. If you don't set it, the app will keep the map area as a placeholder.
-
-Local development
-
-1. Install dependencies
-
-```bash
-pnpm install
-# or npm install
-```
-
-2. Add environment variable (optional for maps)
-
-Create a `.env.local` file with:
-
-```
-NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=your_mapbox_token_here
-```
-
-3. Run the dev server
-
-```bash
-pnpm dev
-# or npm run dev
-```
-
-What I changed / Why
-- Added typed `src/types.ts` and `src/lib/api.ts` to centralize fetching and normalize data coming from the CityBikes API. This helps with type-safety and handling inconsistent shapes.
-- Updated both map components to manage markers dynamically so they reflect the latest data.
-- Replaced direct axios calls in pages with the API helpers.
-
-Next steps / improvements
-- Improve accessibility (keyboard navigation for lists and map markers)
-- Add better loading skeletons and error UI
-- Implement server-side caching or static generation for the list
-- Add unit / integration tests
-
-If you'd like, I can continue with more polishing: add tests, improve styling to match the UI kit more closely, or implement clustering on the map.
-# Bicycle Networks Dashboard
-
 A modern React SPA for discovering and exploring bicycle networks around the world. Built with Next.js, TypeScript, Tailwind CSS, and Shadcn/ui.
 
 ## Overview
@@ -76,6 +24,7 @@ This application allows users to:
 - **Search Functionality**: Filter networks by name and operating company
 - **Country Filter**: Filter networks by country
 - **Interactive Map**: Clickable map showing network locations with popups
+- **Near Me**: Center map on user location and navigate to nearest network (bonus)
 - **Pagination**: Navigate through networks with pagination controls
 - **URL Persistence**: Search and filter parameters are stored in the URL for bookmarking and sharing
 
@@ -98,7 +47,7 @@ This application allows users to:
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS v4
 - **UI Components**: Shadcn/ui
-- **Maps**: Mapbox GL
+- **Maps**: Mapbox GL with Leaflet fallback when no token is provided
 - **HTTP Client**: Axios
 - **Data Source**: CityBik.es API
 
@@ -110,8 +59,8 @@ This application allows users to:
 
 ### Data Fetching
 - Implemented client-side data fetching using Axios
-- Error handling with try-catch blocks and console logging
-- Automatic data refresh on component mount
+- Normalized and type-checked API responses in a single data layer
+- Error handling with try-catch blocks and friendly UI states
 
 ### Component Structure
 - **Page Components**: `src/app/page.tsx` (main view) and `src/app/network/[id]/page.tsx` (detail view)
@@ -139,7 +88,7 @@ This application allows users to:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/bicycle-networks-dashboard.git
+git clone https://github.com/dloynaz/bicycle-networks-dashboard.git
 cd bicycle-networks-dashboard
 ```
 
@@ -148,7 +97,7 @@ cd bicycle-networks-dashboard
 npm install
 ```
 
-3. Set up environment variables:
+3. Set up environment variables (optional for maps):
 Create a `.env.local` file in the root directory:
 ```
 NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=your_mapbox_token_here
@@ -233,7 +182,7 @@ src/
 
 ### Challenge 2: URL State Persistence
 **Problem**: Need to maintain filter and search state across page reloads and enable sharing of filtered URLs.
-**Solution**: Implemented URL-based state management using `useSearchParams` and `useRouter` hooks to sync state with URL query parameters.
+**Solution**: Implemented URL-based state management using `useRouter` to sync state with URL query parameters.
 
 ### Challenge 3: Pagination with Filtering
 **Problem**: When filters change, pagination should reset to page 1 to avoid empty states.
@@ -249,7 +198,7 @@ src/
 
 ## Future Enhancements
 
-1. **User Location Feature**: Implement geolocation to center map on user's current location
+1. **User Location Feature**: Implement geolocation to center map on user's current location (done)
 2. **Advanced Filtering**: Add more filter options (network size, operating company, etc.)
 3. **Station Search**: Add ability to search for specific stations
 4. **Favorites**: Allow users to save favorite networks
@@ -260,7 +209,11 @@ src/
 
 ## Deployment
 
-This application is ready to be deployed to Vercel:
+This application is deployed on Vercel:
+
+- Production: https://bicycle-networks-dashboard-2.vercel.app
+
+### Deploy your own
 
 1. Push your code to GitHub
 2. Visit [Vercel](https://vercel.com) and import the repository
@@ -274,27 +227,12 @@ Ensure the following is set in your deployment platform:
 NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=your_mapbox_token_here
 ```
 
-## Performance Metrics
+## Tests
 
-- **First Contentful Paint**: ~2.5s (depends on network speed)
-- **Time to Interactive**: ~3.5s
-- **Lighthouse Score**: 85+ (with proper map optimization)
+Run unit and component tests with Vitest:
 
-## Browser Support
-
-- Chrome/Edge: Latest 2 versions
-- Firefox: Latest 2 versions
-- Safari: Latest 2 versions
-- Mobile browsers: iOS Safari 14+, Chrome Android 80+
-
-## License
-
-This project is open source and available under the MIT License.
-
-## Contact & Support
-
-For questions or support, please reach out to [your-email@example.com].
-
----
-
-**Built with ❤️ for cyclists and data enthusiasts**
+```bash
+npm run test
+# or
+npm run test:watch
+```

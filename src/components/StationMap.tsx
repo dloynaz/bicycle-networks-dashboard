@@ -66,6 +66,9 @@ const StationMap: React.FC<StationMapProps> = ({ stations, networkLocation }) =>
       if (!station.latitude || !station.longitude) return;
       const el = document.createElement('div');
       el.className = 'w-3.5 h-3.5 rounded-full bg-emerald-400 shadow-md';
+      el.setAttribute('role', 'button');
+      el.setAttribute('tabindex', '0');
+      el.setAttribute('aria-label', `View station ${station.name}`);
 
       const marker = new mapboxgl.Marker({ element: el })
         .setLngLat([station.longitude, station.latitude])
@@ -87,6 +90,12 @@ const StationMap: React.FC<StationMapProps> = ({ stations, networkLocation }) =>
 
       const popup = new mapboxgl.Popup({ offset: 20 }).setHTML(popupHTML);
       marker.setPopup(popup);
+      el.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          marker.togglePopup();
+        }
+      });
       markers.current.push(marker);
     });
   }, [clearMarkers, stations]);

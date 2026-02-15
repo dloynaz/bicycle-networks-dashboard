@@ -225,7 +225,7 @@ const HomePage = () => {
                 </div>
               ))
             ) : error ? (
-              <div className="text-center py-8 text-zinc-500">
+              <div className="text-center py-8 text-zinc-500" role="alert" aria-live="polite">
                 <p className="text-sm">{error}</p>
                 <button
                   type="button"
@@ -240,7 +240,7 @@ const HomePage = () => {
                 <NetworkCard key={network.id} network={network} onClick={handleNetworkClick} />
               ))
             ) : (
-              <div className="text-center py-8 text-zinc-500">
+              <div className="text-center py-8 text-zinc-500" role="status" aria-live="polite">
                 <p className="text-sm">No networks found</p>
               </div>
             )}

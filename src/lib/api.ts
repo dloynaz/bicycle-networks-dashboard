@@ -1,7 +1,39 @@
 import axios from 'axios';
 import { Network, Station } from '../types';
 
-type RawNetwork = any;
+type RawLocation = {
+  latitude?: unknown;
+  longitude?: unknown;
+  lat?: unknown;
+  lng?: unknown;
+  lon?: unknown;
+  city?: unknown;
+  name?: unknown;
+  country?: unknown;
+};
+
+type RawStation = {
+  id?: unknown;
+  name?: unknown;
+  free_bikes?: unknown;
+  empty_slots?: unknown;
+  latitude?: unknown;
+  longitude?: unknown;
+  lat?: unknown;
+  lng?: unknown;
+  lon?: unknown;
+  extra?: { uid?: unknown };
+};
+
+type RawNetwork = {
+  id?: unknown;
+  name?: unknown;
+  company?: unknown;
+  location?: RawLocation;
+  city?: RawLocation | unknown;
+  href?: unknown;
+  stations?: RawStation[];
+};
 
 const API_BASE = 'https://api.citybik.es/v2';
 const api = axios.create({
@@ -13,7 +45,7 @@ const api = axios.create({
 export async function fetchNetworks(): Promise<Network[]> {
   try {
     const res = await api.get('/networks');
-    const networks: RawNetwork[] = res.data?.networks || [];
+    const networks: RawNetwork[] = Array.isArray(res.data?.networks) ? res.data.networks : [];
     return networks.map(normalizeNetwork);
   } catch (e) {
     throw new Error('Unable to load networks.');
@@ -32,7 +64,7 @@ export async function fetchNetworkById(id: string): Promise<Network | null> {
     if (res.status === 404) {
       try {
         const listRes = await api.get('/networks');
-        const all: RawNetwork[] = listRes.data?.networks || [];
+        const all: RawNetwork[] = Array.isArray(listRes.data?.networks) ? listRes.data.networks : [];
 
         const slug = (s: string) =>
           String(s)
@@ -42,10 +74,10 @@ export async function fetchNetworkById(id: string): Promise<Network | null> {
 
         const idLower = id.toLowerCase();
 
-        const candidate = all.find((n: any) => {
-          const nid = String(n.id || '').toLowerCase();
-          const href = String(n.href || '').toLowerCase();
-          const nameSlug = slug(String(n.name || '')).toLowerCase();
+        const candidate = all.find((n: RawNetwork) => {
+          const nid = String(n.id ?? '').toLowerCase();
+          const href = String(n.href ?? '').toLowerCase();
+          const nameSlug = slug(String(n.name ?? '')).toLowerCase();
 
           if (nid === idLower) return true;
           if (href.endsWith(`/${idLower}`)) return true;
@@ -79,7 +111,7 @@ export async function fetchNetworkById(id: string): Promise<Network | null> {
     const raw = res.data?.network;
     if (!raw) return null;
     const normalized = normalizeNetwork(raw);
-    if (raw.stations) normalized.stations = normalizeStations(raw.stations);
+    if (Array.isArray(raw.stations)) normalized.stations = normalizeStations(raw.stations);
     return normalized;
   } catch (e) {
     return null;
@@ -94,9 +126,9 @@ function normalizeNetwork(raw: RawNetwork): Network {
     ? [String(raw.company)]
     : [];
 
-  const location = raw.location || raw.city || {};
-  const latitude = Number(location.latitude ?? location.lat ?? 0);
-  const longitude = Number(location.longitude ?? location.lng ?? location.lon ?? 0);
+  const location: RawLocation = (raw.location as RawLocation) || (raw.city as RawLocation) || {};
+  const latitude = toNumber(location.latitude ?? location.lat, 0);
+  const longitude = toNumber(location.longitude ?? location.lng ?? location.lon, 0);
 
   return {
     id: String(raw.id),
@@ -112,13 +144,18 @@ function normalizeNetwork(raw: RawNetwork): Network {
 }
 
 // Normalize stations into the app's `Station` shape.
-function normalizeStations(stations: any[]): Station[] {
-  return stations.map((s: any) => ({
-    id: s.id ?? s.extra?.uid ?? `${s.latitude}-${s.longitude}`,
-    name: s.name ?? 'Unknown',
-    free_bikes: Number(s.free_bikes ?? 0),
-    empty_slots: Number(s.empty_slots ?? 0),
-    latitude: Number(s.latitude ?? s.lat ?? 0),
-    longitude: Number(s.longitude ?? s.lon ?? s.lng ?? 0),
+function normalizeStations(stations: RawStation[]): Station[] {
+  return stations.map((s) => ({
+    id: String(s.id ?? s.extra?.uid ?? `${s.latitude}-${s.longitude}`),
+    name: String(s.name ?? 'Unknown'),
+    free_bikes: toNumber(s.free_bikes, 0),
+    empty_slots: toNumber(s.empty_slots, 0),
+    latitude: toNumber(s.latitude ?? s.lat, 0),
+    longitude: toNumber(s.longitude ?? s.lon ?? s.lng, 0),
   }));
+}
+
+function toNumber(value: unknown, fallback: number) {
+  const num = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(num) ? num : fallback;
 }
