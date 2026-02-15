@@ -7,6 +7,8 @@ describe('SearchControls', () => {
     const onSearchChange = vi.fn();
     const onCountryChange = vi.fn();
 
+    vi.useFakeTimers();
+
     render(
       <SearchControls
         search=""
@@ -19,7 +21,11 @@ describe('SearchControls', () => {
     const input = screen.getByPlaceholderText('Search network');
     fireEvent.change(input, { target: { value: 'bike' } });
 
+    vi.runAllTimers();
+
     expect(onSearchChange).toHaveBeenCalledWith('bike');
+
+    vi.useRealTimers();
   });
 
   it('filters countries in the dropdown', () => {
